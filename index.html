@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+
+<!--
+Copyright 2017 Google Inc.
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+    http://www.apache.org/licenses/LICENSE-2.0
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+-->
+
+<html lang="en">
+    <head>
+
+        <!-- Global site tag (gtag.js) - Google Analytics -->
+        <script async src="https://www.googletagmanager.com/gtag/js?id=UA-33848682-1"></script>
+        <script>
+            window.dataLayer = window.dataLayer || [];
+            function gtag() {
+                window.dataLayer.push(arguments);
+            }
+            gtag('js', new Date());
+            gtag('config', 'UA-33848682-1');
+        </script>
+
+        <meta charset="utf-8">
+        <meta name="description" content="Simplest possible examples of HTML, CSS and JavaScript.">
+        <meta name="author" content="//samdutton.com">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta itemprop="name" content="simpl.info: simplest possible examples of HTML, CSS and JavaScript">
+        <meta itemprop="image" content="/images/icons/icon192.png">
+        <meta id="theme-color" name="theme-color" content="#fff">
+
+        <link rel="icon" href="/images/icons/icon192.png">
+
+        <base target="_blank">
+
+
+        <title>RTCPeerConnection</title>
+
+
+
+        <style>
+            button {
+                margin: 0 20px 0 0;
+                width: 85.9px;
+            }
+            button#hangupButton {
+                margin: 0;
+            }
+            p.borderBelow {
+                margin: 0 0 1.5em 0;
+                padding: 0 0 1.5em 0;
+            }
+            video {
+                height: 225px;
+                margin: 0 0 20px 0;
+                vertical-align: top;
+                width: calc(50% - 13px);
+            }
+            video#localVideo {
+                margin: 0 20px 20px 0;
+            }
+            @media (max-width: 400px) {
+                button {
+                    width: 83px;
+                }
+                button {
+                    margin: 0 11px 10px 0;
+                }
+                video {
+                    height: 90px;
+                    margin: 0 0 10px 0;
+                    width: calc(50% - 7px);
+                }
+                video#localVideo {
+                    margin: 0 10px 20px 0;
+                }
+            }
+        </style>
+
+    </head>
+
+    <body>
+
+        <div id="container">
+
+            <!-- <div id="highlight">
+              <p>Check out my new article: <a href="https://medium.com/@samdutton/website-prelaunch-checklist-14d0002b4c7c">Website prelaunch checklist</a><br>— simple techniques to find and fix glitches.</p>
+            </div> -->
+
+            <!-- <div id="highlight">
+              <p>I wrote an app!
+                <br><br>
+                <a href="https://medium.com/@samdutton/website-prelaunch-checklist-14d0002b4c7c">Multihouse</a> gets median scores for multiple URLs for multiple Lighthouse runs.</p>
+            </div> -->
+
+            <div id="highlight">
+                <p>I built a PWA to demonstrate fast, offline-enabled search:
+                    <br><br>
+                    <a href="https://shearch.me">shearch.me</a>
+                    <br><br>
+                    This searches all of Shakespeare's plays and poems, including locations and stage directions. Find out more <a href="https://samdutton.wordpress.com/2019/02/19/search-shakespeare/" title="Link to blog post about shearch.me">here</a>.</p>
+            </div>
+
+            <h1><a href="../index.html" title="simpl.info home page">simpl.info</a> RTCPeerConnection</h1>
+
+            <!-- <p>Check out the complete set of WebRTC demos at <a href="https://webrtc.github.io/samples/" title="WebRTC samples GitHub Pages">webrtc.github.io/samples</a>.</p> -->
+
+            <video id="localVideo" autoplay muted></video>
+            <video id="remoteVideo" autoplay></video>
+
+            <div>
+                <button id="callButton">Call</button>
+                <button id="hangupButton">Hang Up</button>
+            </div>
+
+            <p>View the console to see logging. The <code>MediaStream</code> object <code>localStream</code>, and the <code>RTCPeerConnection</code> objects <code>localPeerConnection</code> and <code>remotePeerConnection</code> are in global scope, so you can inspect them in the console as well.</p>
+
+            <p>For more information about RTCPeerConnection, see <a href="https://www.html5rocks.com/en/tutorials/webrtc/basics/" title="HTML5 Rocks article about WebRTC by Sam Dutton">Getting Started With WebRTC</a>.</p>
+
+
+            <a href="https://github.com/samdutton/simpl/blob/gh-pages/rtcpeerconnection" title="View source for this page on GitHub" id="viewSource">View source on GitHub</a>
+
+        </div>
+        <script src="/socket.io/socket.io.js"></script>
+        <script>
+            var socket = io.connect('http://localhost:3000');
+            console.log('connected successfully.');
+            var servers = null;
+            var callButton = document.querySelector('#callButton');
+            var hangupButton = document.querySelector('#hangupButton');
+            hangupButton.disabled = true;
+            callButton.onclick = make_a_call;
+            hangupButton.onclick = hangup;
+            var startTime;
+            var localVideo = document.querySelector('#localVideo');
+            var remoteVideo = document.querySelector('#remoteVideo');
+            localVideo.addEventListener('loadedmetadata', function () {
+                console.log('Local video videoWidth: ' + this.videoWidth +
+                        'px,  videoHeight: ' + this.videoHeight + 'px');
+            });
+            remoteVideo.addEventListener('loadedmetadata', function () {
+                console.log('Remote video videoWidth: ' + this.videoWidth +
+                        'px,  videoHeight: ' + this.videoHeight + 'px');
+            });
+            remoteVideo.onresize = function () {
+                console.log('Remote video size changed to ' +
+                        remoteVideo.videoWidth + 'x' + remoteVideo.videoHeight);
+                // We'll use the first onsize callback as an indication that video has started
+                // playing out.
+                if (startTime) {
+                    var elapsedTime = window.performance.now() - startTime;
+                    console.log('Setup time: ' + elapsedTime.toFixed(3) + 'ms');
+                    startTime = null;
+                }
+            };
+            var tx_pc;
+            var rx_pc;
+            var offerOptions = {
+                offerToReceiveAudio: 1,
+                offerToReceiveVideo: 1
+            };
+            function getName(pc) {
+                return (pc === tx_pc) ? 'tx_pc' : 'rx_pc';
+            }
+
+            function getOtherPc(pc) {
+                return (pc === tx_pc) ? rx_pc : tx_pc;
+            }
+
+
+            function make_a_call() {
+
+                navigator.mediaDevices.getUserMedia({
+                    audio: true,
+                    video: true
+                }).then((stream) => {
+                    callButton.disabled = true;
+                    hangupButton.disabled = false;
+                    console.log('Playing local video');
+                    localVideo.srcObject = stream;
+                    console.log('Starting call');
+                    startTime = window.performance.now();
+                    var videoTracks = stream.getVideoTracks();
+                    var audioTracks = stream.getAudioTracks();
+                    if (videoTracks.length > 0) {
+                        console.log('Using video device: ' + videoTracks[0].label);
+                    }
+                    if (audioTracks.length > 0) {
+                        console.log('Using audio device: ' + audioTracks[0].label);
+                    }
+                    tx_pc = new RTCPeerConnection(servers);
+                    console.log('Created local peer connection object tx_pc');
+                    tx_pc.onicecandidate = (e) => {
+                        onIceCandidate(tx_pc, e);
+                    };
+                    tx_pc.oniceconnectionstatechange = (e) => {
+                        onIceStateChange(tx_pc, e);
+                    };
+                    tx_pc.addStream(stream);
+                    console.log('Added local stream to tx_pc');
+                    console.log('tx_pc createOffer start');
+                    tx_pc.createOffer(
+                            offerOptions
+                            ).then(
+                            onCreateOfferSuccess,
+                            onCreateSessionDescriptionError
+                            );
+
+//                    socket.on('message', function (stream) {
+
+                        stream = stream.sdp;
+                        rx_pc = new RTCPeerConnection(servers);
+                        console.log('Created remote peer connection object rx_pc');
+                        rx_pc.onicecandidate = (e) => {
+                            onIceCandidate(rx_pc, e);
+                        };
+                        rx_pc.oniceconnectionstatechange = (e) => {
+                            onIceStateChange(rx_pc, e);
+                        };
+                        
+                        rx_pc.onaddstream = gotRemoteStream;
+
+//                    })
+                })
+                        .catch(function (e) {
+                            alert('getUserMedia() error: ' + e.name);
+                        });
+            }
+
+            function onCreateSessionDescriptionError(error) {
+                console.log('Failed to create session description: ' + error.toString());
+            }
+
+            function onCreateOfferSuccess(desc) {
+                console.log('Offer from tx_pc\n' + desc.sdp);
+                console.log('tx_pc setLocalDescription start');
+                tx_pc.setLocalDescription(desc).then(
+                        () => {
+                    onSetLocalSuccess(tx_pc);
+                },
+                        onSetSessionDescriptionError
+                        );
+                console.log('rx_pc setRemoteDescription start');
+                rx_pc.setRemoteDescription(desc).then(
+                        function () {
+                            onSetRemoteSuccess(rx_pc);
+                        },
+                        onSetSessionDescriptionError
+                        );
+                console.log('rx_pc createAnswer start');
+                // Since the 'remote' side has no media stream we need
+                // to pass in the right constraints in order for it to
+                // accept the incoming offer of audio and video.
+                rx_pc.createAnswer().then(
+                        onCreateAnswerSuccess,
+                        onCreateSessionDescriptionError
+                        );
+            }
+
+            function onSetLocalSuccess(pc) {
+                
+                console.log(getName(pc) + ' setLocalDescription complete');
+                socket.emit("message", {'sdp': pc.localDescription});
+            }
+
+            function onSetRemoteSuccess(pc) {
+                console.log(getName(pc) + ' setRemoteDescription complete');
+            }
+
+            function onSetSessionDescriptionError(error) {
+                console.log('Failed to set session description: ' + error.toString());
+            }
+
+            function gotRemoteStream(e) {
+                remoteVideo.srcObject = e.stream;
+                console.log('rx_pc received remote stream');
+            }
+
+            function onCreateAnswerSuccess(desc) {
+                console.log('Answer from rx_pc:\n' + desc.sdp);
+                console.log('rx_pc setLocalDescription start');
+                rx_pc.setLocalDescription(desc).then(
+                        function () {
+                            onSetLocalSuccess(rx_pc);
+                        },
+                        onSetSessionDescriptionError
+                        );
+                console.log('tx_pc setRemoteDescription start');
+                tx_pc.setRemoteDescription(desc).then(
+                        function () {
+                            onSetRemoteSuccess(tx_pc);
+                        },
+                        onSetSessionDescriptionError
+                        );
+            }
+
+            function onIceCandidate(pc, event) {
+                getOtherPc(pc).addIceCandidate(event.candidate)
+                        .then(
+                                function () {
+                                    onAddIceCandidateSuccess(pc);
+                                },
+                                function (err) {
+                                    onAddIceCandidateError(pc, err);
+                                }
+                        );
+                console.log(getName(pc) + ' ICE candidate: \n' + (event.candidate ?
+                        event.candidate.candidate : '(null)'));
+            }
+
+            function onAddIceCandidateSuccess(pc) {
+                console.log(getName(pc) + ' addIceCandidate success');
+            }
+
+            function onAddIceCandidateError(pc, error) {
+                console.log(getName(pc) + ' failed to add ICE Candidate: ' + error.toString());
+            }
+
+            function onIceStateChange(pc, event) {
+                if (pc) {
+                    console.log(getName(pc) + ' ICE state: ' + pc.iceConnectionState);
+                    console.log('ICE state change event: ', event);
+                }
+            }
+
+            function hangup() {
+                console.log('Ending call');
+                tx_pc.close();
+                rx_pc.close();
+                tx_pc = null;
+                rx_pc = null;
+                hangupButton.disabled = true;
+                callButton.disabled = false;
+            }
+
+        </script>
+    </body>
+
+
+</html>
