@@ -4,7 +4,7 @@
   "description": "node.js video chat app",
   "main": "server.js",
   "dependencies": {
-    "express": "^4.16.4",
+    "express": "^4.17.3",
     "mime": "~1.2.7",
     "node-static": "^0.7.9",
     "socket.io": "^1.7.4"
